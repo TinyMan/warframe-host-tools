@@ -1,0 +1,58 @@
+﻿<Window x:Class="WarframeHostTools.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:WarframeHostTools"
+        mc:Ignorable="d"
+        Title="Warframe Host Tools" Closed="Window_Closed">
+    <Grid>
+        <StackPanel>
+            <WrapPanel Margin="15" HorizontalAlignment="Stretch" Height="50" VerticalAlignment="Top">
+                <ComboBox Name="interfaces">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <Rectangle Width="16" Height="16" Margin="0,2,5,2" />
+                                <TextBlock Text="{Binding Interface.FriendlyName}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <Button Name="btnStart" Margin="5,0,0,0" Click="btnStart_Click">Start</Button>
+                <Button Name="btnStop" Margin="5,0,0,0" Click="btnStop_Click">Stop</Button>
+                <Button Name="btnUnblockAll" Margin="5,0,0,0" Click="btnUnblockAll_Click">Unblock all</Button>
+            </WrapPanel>
+            <DataGrid Name="datagrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionUnit="Cell">
+                <DataGrid.RowStyle>
+                    <Style TargetType="{x:Type DataGridRow}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsBlocked}" Value="True">
+                                <Setter Property="Background" Value="PaleVioletRed"></Setter>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </DataGrid.RowStyle>
+                <DataGrid.Columns>
+                    <DataGridTemplateColumn Header="Actions">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Click="btnBlock_Click">Toggle block</Button>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Binding="{Binding FirstPacket, StringFormat=HH:mm:ss:fff}" Header="First"></DataGridTextColumn>
+                    <DataGridTextColumn Binding="{Binding IPAddress}" Header="IPAddress"></DataGridTextColumn>
+                    <DataGridTextColumn Binding="{Binding Location}" Header="Location"></DataGridTextColumn>
+                    <DataGridTextColumn Binding="{Binding Hosting}" Header="Hosting"></DataGridTextColumn>
+                    <DataGridTextColumn Binding="{Binding Org}" Header="Org"></DataGridTextColumn>
+                    <DataGridTextColumn Binding="{Binding AsName}" Header="AsName"></DataGridTextColumn>
+                    <!--<DataGridTextColumn Binding="{Binding As}" Header="As"></DataGridTextColumn>-->
+                    <DataGridTextColumn Binding="{Binding Isp}" Header="Isp"></DataGridTextColumn>
+                    <DataGridTextColumn Binding="{Binding PacketCount}" Header="PacketCount"></DataGridTextColumn>
+                    <DataGridTextColumn Binding="{Binding LastPacket, StringFormat=HH:mm:ss:fff}" Header="Last"></DataGridTextColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </StackPanel>
+    </Grid>
+</Window>
