@@ -2,12 +2,16 @@
 using SharpPcap;
 using SharpPcap.LibPcap;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Interop;
 using WindowsFirewallHelper;
 using WindowsFirewallHelper.Addresses;
 using WindowsFirewallHelper.FirewallRules;
@@ -36,7 +40,13 @@ namespace WarframeHostTools
 		private const string FW_RULE_NAME_OUT = "Warframe kick (out)";
 		private readonly FirewallWASRule InRule;
 		private readonly FirewallWASRule OutRule;
+		private Dictionary<IPAddress, string> PlayerNameByIP = new Dictionary<IPAddress, string>();
+		private Dictionary<string, string> PlayerNameByMM = new Dictionary<string, string>();
+		private Dictionary<string, IPAddress> IPByMM = new Dictionary<string, IPAddress>();
+		private string? punchthrough_failure_addr = null;
+		private Thread _logReaderThread;
 
+		private ICollectionView ItemList;
 
 		public MainWindow()
 		{
@@ -54,7 +64,10 @@ namespace WarframeHostTools
 
 				interfaces.SelectedItem = devices.FirstOrDefault(d => d.Addresses.FirstOrDefault()?.Addr.ipAddress.Equals(defaultInterface) ?? false);
 			}
-			datagrid.ItemsSource = Peers;
+			var _itemSourceList = new CollectionViewSource() { Source = Peers };
+			ItemList = _itemSourceList.View;
+			ItemList.Filter = FilterServers;
+			datagrid.ItemsSource = ItemList;
 
 
 			InRule = FirewallWAS.Instance.Rules.FirstOrDefault(r => r.Name == FW_RULE_NAME_IN)!;
@@ -81,7 +94,122 @@ namespace WarframeHostTools
 				OutRule.IsEnable = false;
 			}
 
+			_logReaderThread = new Thread(LogReader);
+			_logReaderThread.Start();
+		}
 
+		public string GetNameByIP(IPAddress ip)
+		{
+			return PlayerNameByIP.GetValueOrDefault(ip) ?? "-";
+		}
+		private void LogReader()
+		{
+			var localAppData = Environment.GetEnvironmentVariable("localappdata")!;
+			var path = Path.Combine(localAppData, "Warframe");
+			var wh = new AutoResetEvent(false);
+			try
+			{
+				var fsw = new FileSystemWatcher(path);
+				fsw.Filter = "EE.log";
+				fsw.EnableRaisingEvents = true;
+				fsw.Changed += (s, e) => wh.Set();
+
+				var fs = new FileStream(Path.Combine(path, "EE.log"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+				using (var sr = new StreamReader(fs))
+				{
+					var s = "";
+					while (true)
+					{
+						s = sr.ReadLine();
+						if (s != null)
+							ProcessLogLine(s);
+						else
+							wh.WaitOne(1000);
+					}
+				}
+			}
+			catch (Exception e)
+			{
+				Console.Error.WriteLine(e.ToString());
+			}
+			finally
+			{
+				wh.Close();
+			}
+		}
+
+		private void ProcessLogLine(string line)
+		{
+			try
+			{
+				int i = line?.IndexOf("]: ") ?? -1;
+				if (i == -1)
+				{
+					return;
+				}
+				var msg = line![(i + 3)..];
+				if (msg.StartsWith("AddSquadMember: "))
+				{
+					var name_end = msg.IndexOf(", mm=", 16) - 1;
+					var name = msg.Substring(16, name_end - 16);
+					var mm_end = msg.IndexOf(", squadCount=", name_end);
+					var mm = msg.Substring(name_end + 5, mm_end - (name_end + 5));
+					PlayerNameByMM[mm] = name;
+					if (IPByMM.TryGetValue(mm, out var ip))
+					{
+						SetNameForIp(ip, name);
+					}
+
+				}
+				else if (msg.StartsWith("VOIP: Registered remote player "))
+				{
+					string data = msg.Substring(31);
+					var sep = data.IndexOf(" (");
+					var mm = data.Substring(0, sep);
+					var ip_end = data.IndexOf(")");
+					var ip = data.Substring(sep + 2, ip_end - sep - 2);
+					if (IPEndPoint.TryParse(ip, out var ipEndpoint))
+					{
+						IPByMM[mm] = ipEndpoint.Address;
+						if (PlayerNameByMM.TryGetValue(mm, out var name))
+						{
+							SetNameForIp(ipEndpoint.Address, name);
+						}
+					}
+				}
+				else if (msg.StartsWith("Failed to punch-through to "))
+				{
+					punchthrough_failure_addr = msg.Substring(53, msg.Length - 3);
+				}
+				else if (msg.StartsWith("VOIP: punch-through failure for "))
+				{
+					string mm = msg.Substring(32, msg.Length - 32 - 2);
+					if (!string.IsNullOrEmpty(punchthrough_failure_addr) &&
+						IPEndPoint.TryParse(punchthrough_failure_addr, out var ipEndpoint))
+					{
+						punchthrough_failure_addr = null;
+						IPByMM[mm] = ipEndpoint.Address;
+						if (PlayerNameByMM.TryGetValue(mm, out var name))
+						{
+							SetNameForIp(ipEndpoint.Address, name);
+						}
+					}
+				}
+			}
+			catch (Exception e)
+			{
+				Console.Error.WriteLine(e.ToString());
+			}
+
+			void SetNameForIp(IPAddress ip, string name)
+			{
+				PlayerNameByIP[ip] = name;
+				var peer = Peers.FirstOrDefault(p => p.IPAddress?.Equals(ip) ?? false);
+				if (peer != null)
+				{
+					peer.Name = name;
+				}
+			}
 		}
 
 		private async Task LookupIp_FreeIpApi(IPAddress address, Peer peer)
@@ -113,6 +241,7 @@ namespace WarframeHostTools
 			peer.Org = ipInfo.Org;
 			peer.Isp = ipInfo.Isp;
 			peer.Hosting = ipInfo.Hosting ?? false;
+			App.Current.Dispatcher.Invoke(() => ItemList.Refresh());
 		}
 
 		private void btnBlock_Click(object sender, RoutedEventArgs e)
@@ -190,6 +319,10 @@ namespace WarframeHostTools
 					peer.FirstPacket = date;
 					peer.PacketCount = 1;
 					peer.LastPacket = date;
+					if (PlayerNameByIP.TryGetValue(address, out var name))
+					{
+						peer.Name = name;
+					}
 					App.Current.Dispatcher.Invoke(() => Peers.Add(peer));
 
 					LookupIp_IpApi(address, peer).ConfigureAwait(false);
@@ -223,6 +356,7 @@ namespace WarframeHostTools
 
 		private void Window_Closed(object sender, EventArgs e)
 		{
+			_logReaderThread.Abort();
 			InRule.IsEnable = false;
 			OutRule.IsEnable = false;
 			//FirewallWAS.Instance.Rules.Remove(rule);
@@ -241,5 +375,21 @@ namespace WarframeHostTools
 				peer.IsBlocked = false;
 			}
 		}
+
+		private void chkServers_Checked(object sender, RoutedEventArgs e)
+		{
+			ItemList.Filter = null;
+		}
+
+		private void chkServers_Unchecked(object sender, RoutedEventArgs e)
+		{
+			ItemList.Filter = FilterServers;
+		}
+
+		private bool FilterServers(object peer)
+		{
+			return !((peer as Peer)?.Hosting ?? false);
+		}
+
 	}
 }

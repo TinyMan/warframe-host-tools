@@ -22,6 +22,7 @@
                 <Button Name="btnStart" Margin="5,0,0,0" Click="btnStart_Click">Start</Button>
                 <Button Name="btnStop" Margin="5,0,0,0" Click="btnStop_Click">Stop</Button>
                 <Button Name="btnUnblockAll" Margin="5,0,0,0" Click="btnUnblockAll_Click">Unblock all</Button>
+                <CheckBox Name="chkServers" Margin="5,0,0,0" Checked="chkServers_Checked" Unchecked="chkServers_Unchecked">Show servers</CheckBox>
             </WrapPanel>
             <DataGrid Name="datagrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionUnit="Cell">
                 <DataGrid.RowStyle>
@@ -43,6 +44,7 @@
                     </DataGridTemplateColumn>
                     <DataGridTextColumn Binding="{Binding FirstPacket, StringFormat=HH:mm:ss:fff}" Header="First"></DataGridTextColumn>
                     <DataGridTextColumn Binding="{Binding IPAddress}" Header="IPAddress"></DataGridTextColumn>
+                    <DataGridTextColumn Binding="{Binding Name}" Header="Name"></DataGridTextColumn>
                     <DataGridTextColumn Binding="{Binding Location}" Header="Location"></DataGridTextColumn>
                     <DataGridTextColumn Binding="{Binding Hosting}" Header="Hosting"></DataGridTextColumn>
                     <DataGridTextColumn Binding="{Binding Org}" Header="Org"></DataGridTextColumn>
