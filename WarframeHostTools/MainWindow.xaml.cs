@@ -153,7 +153,7 @@ namespace WarframeHostTools
 					var name_end = msg.IndexOf(", mm=", 16) - 1;
 					var name = msg.Substring(16, name_end - 16);
 					var mm_end = msg.IndexOf(", squadCount=", name_end);
-					var mm = msg.Substring(name_end + 5, mm_end - (name_end + 5));
+					var mm = msg.Substring(name_end + 6, mm_end - (name_end + 6));
 					PlayerNameByMM[mm] = name;
 					if (IPByMM.TryGetValue(mm, out var ip))
 					{
